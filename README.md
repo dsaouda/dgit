@@ -1,0 +1,2 @@
+# dgit
+Dump git projects
