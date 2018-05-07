@@ -38,6 +38,7 @@ private fun run(args: Array<String>) {
     criarDiretorio(path)
     val repos = repositorios(username!!, password!!)
 
+
     repos.forEachIndexed({ i, r ->
         println("${i.plus(1)} de ${repos.size}")
 
@@ -47,24 +48,39 @@ private fun run(args: Array<String>) {
 
         println("projeto ${r.name} - ${r.cloneUrl}")
 
-        when (gitexists(workdir)) {
-            true -> command = gitpull()
-            false -> {
-                workdir = workdir.parentFile
-                val giturl = giturl(r.cloneUrl, username, password)
-                command = gitclone(giturl)
-            }
-        }
+        //tentativas para executar o comando com sucesso
+        for (index in 1..3) {
 
-        println("${command}")
-        println(runCommand(command, workdir))
-        println("")
-    });
+            when (gitexists(workdir)) {
+                true -> command = gitpull()
+                false -> {
+                    workdir = workdir.parentFile
+                    val giturl = giturl(r.cloneUrl, username, password)
+                    command = gitclone(giturl)
+                }
+            }
+
+            println("${command}")
+            val saidaGit = runCommand(command, workdir)
+
+            if (saidaGit.contains("Checking connectivity... done", true) ||
+                saidaGit.contains("Already up-to-date", true) ||
+                saidaGit.contains("Resolving deltas:    100%", true) ||
+                (saidaGit.contains("Updating", true) && saidaGit.contains("Fast-forward", true))
+            ) {
+                print(" [ok]")
+                println("\n----------------------")
+                break
+            }
+
+            println("[error] ${index} de 3 tentativas ... ")
+        }
+    })
 }
 
 private fun gitexists(workdir: File) = workdir.exists()
 private fun gitpull() = "git pull --all -p"
-private fun gitclone(cloneUrl: String) = "git clone ${cloneUrl}"
+private fun gitclone(cloneUrl: String) = "git clone -v --progress ${cloneUrl}"
 
 private fun giturl(cloneUrl: String, username: String?, password: String?): String {
     val passwordUrl = password?.replace("@", "%40")
@@ -111,6 +127,11 @@ private fun runCommand(command: String, workingDir: File): String {
             .redirectError(ProcessBuilder.Redirect.PIPE)
             .start()
 
-    proc.waitFor(60, TimeUnit.MINUTES)
-    return proc.inputStream.bufferedReader().readText()
+    while(proc.isAlive) {
+        print(".")
+        Thread.sleep(1000)
+    }
+
+    return proc.errorStream.bufferedReader().readText() + proc.inputStream.bufferedReader().readText()
+    //return proc.inputStream.bufferedReader().readText()
 }
